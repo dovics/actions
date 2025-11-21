@@ -71,7 +71,7 @@ jobs:
           echo "text<<$EOF" >> $GITHUB_OUTPUT
           echo "$message" >> $GITHUB_OUTPUT
           echo "$EOF" >> $GITHUB_OUTPUT
-          
+
       - name: Send Telegram Message
         if: steps.coze_workflow.outputs.status == '200'
         uses: appleboy/telegram-action@master
@@ -79,3 +79,4 @@ jobs:
           to: ${{ secrets.TELEGRAM_TO }}
           token: ${{ secrets.TELEGRAM_TOKEN }}
           message: ${{ steps.parse_message.outputs.text }}
+          format: markdown
