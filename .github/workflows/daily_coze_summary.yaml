@@ -1,0 +1,81 @@
+name: Daily Coze Summary
+
+env: 
+  TZ: "Asia/Shanghai"
+
+on: 
+  schedule:
+    - cron: "0 8 * * *"
+  push:
+    branches:
+      - main
+
+jobs:
+  summary:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Coze Workflow
+        id: coze_workflow
+        run: |
+          response=$(curl -s -w "\n%{http_code}" -X POST 'https://api.coze.cn/v1/workflow/run' \
+            -H "Authorization: Bearer ${{secrets.COZE_TOKEN}}" \
+            -H "Content-Type: application/json" \
+            -d '{"workflow_id": "${{secrets.COZE_WORKFLOW_ID}}"}')
+          
+          # Extract HTTP status code (last line)
+          http_code=$(echo "$response" | tail -n 1)
+          
+          # Extract JSON body (everything except last line)
+          json_body=$(echo "$response" | head -n -1 | jq .data)
+          
+          echo "status=$http_code" >> $GITHUB_OUTPUT
+          echo "response=$json_body" >> $GITHUB_OUTPUT
+          
+          # Print response for debugging
+          echo "Response received:"
+          echo "$json_body"
+          
+          # Fail the workflow if status code is not 200
+          if [ "$http_code" != "200" ]; then
+            echo "Request failed with status code: $http_code"
+            exit 1
+          fi
+          
+      - name: Check Status and Set Message
+        if: steps.coze_workflow.outputs.status == '200'
+        id: parse_message
+        run: |
+          # Print raw response for debugging
+          echo "Raw response from previous step:"
+          echo '${{ steps.coze_workflow.outputs.response }}'
+          
+          # Try to parse JSON directly first
+          message=$(echo '${{ steps.coze_workflow.outputs.response }}' | jq -r '.output' 2>/dev/null) || \
+          # If direct parsing fails, try to unescape and then parse
+          {
+            echo "Direct parsing failed, trying to unescape..."
+            unescaped_response=$(echo '${{ steps.coze_workflow.outputs.response }}' | sed 's/\\\\/\\/g' | sed 's/\\"/"/g')
+            # Remove leading and trailing double quotes if present
+            unescaped_response=$(echo "$unescaped_response" | sed 's/^"//' | sed 's/"$//')
+            echo "Unescaped response:"
+            echo "$unescaped_response"
+            message=$(echo "$unescaped_response" | jq -r '.output')
+          } || \
+          # If all else fails, set error message
+          {
+            echo "Failed to parse JSON response"
+            message="Error: Failed to parse response from Coze API"
+          }
+          echo "Parsed message: $message" 
+          EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+          echo "text<<$EOF" >> $GITHUB_OUTPUT
+          echo "$message" >> $GITHUB_OUTPUT
+          echo "$EOF" >> $GITHUB_OUTPUT
+          
+      - name: Send Telegram Message
+        if: steps.coze_workflow.outputs.status == '200'
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TELEGRAM_TO }}
+          token: ${{ secrets.TELEGRAM_TOKEN }}
+          message: ${{ steps.parse_message.outputs.text }}
