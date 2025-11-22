@@ -1,11 +1,8 @@
 name: Daily Coze Summary
 
-env: 
-  TZ: "Asia/Shanghai"
-
 on: 
   schedule:
-    - cron: "0 8 * * *"
+    - cron: "0 0 * * *"
   push:
     branches:
       - main
@@ -59,24 +56,27 @@ jobs:
             unescaped_response=$(echo "$unescaped_response" | sed 's/^"//' | sed 's/"$//')
             echo "Unescaped response:"
             echo "$unescaped_response"
-            message=$(echo "$unescaped_response" | jq -r '.output')
+            output=$(echo "$unescaped_response" | jq -r '.output')
           } || \
-          # If all else fails, set error message
+          # If all else fails, set error output
           {
             echo "Failed to parse JSON response"
-            message="Error: Failed to parse response from Coze API"
+            output="Error: Failed to parse response from Coze API"
           }
-          echo "Parsed message: $message" 
-          EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
-          echo "text<<$EOF" >> $GITHUB_OUTPUT
-          echo "$message" >> $GITHUB_OUTPUT
-          echo "$EOF" >> $GITHUB_OUTPUT
-
+          echo "Parsed output: $output" 
+          
+          # Write output to file
+          echo "$output" > output.md
+          echo "Output written to output.md"
+      - name: Test
+        run: |
+          cat output.md
       - name: Send Telegram Message
         if: steps.coze_workflow.outputs.status == '200'
         uses: appleboy/telegram-action@master
         with:
           to: ${{ secrets.TELEGRAM_TO }}
           token: ${{ secrets.TELEGRAM_TOKEN }}
-          message: ${{ steps.parse_message.outputs.text }}
+          document: output.md
           format: markdown
+          disable_web_page_preview: true
