@@ -65,18 +65,23 @@ jobs:
           }
           echo "Parsed output: $output" 
           
-          # Write output to file
-          echo "$output" > output.md
-          echo "Output written to output.md"
-      - name: Test
-        run: |
-          cat output.md
+          # Generate filename with date and time
+          timestamp=$(date +"%Y-%m-%d_%H-%M-%S")
+          filename="summary_${timestamp}.md"
+          x=-
+          # Write output to file with date-time filename
+          echo "$output" > "$filename"
+          echo "Output written to $filename"
+          
+          # Save filename for next step
+          echo "filename=$filename" >> $GITHUB_OUTPUT
+          echo "timestamp=$timestamp" >> $GITHUB_OUTPUT
       - name: Send Telegram Message
         if: steps.coze_workflow.outputs.status == '200'
         uses: appleboy/telegram-action@master
         with:
           to: ${{ secrets.TELEGRAM_TO }}
           token: ${{ secrets.TELEGRAM_TOKEN }}
-          document: output.md
+          document: ${{ steps.parse_message.outputs.filename }}
           format: markdown
           disable_web_page_preview: true
